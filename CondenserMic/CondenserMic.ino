@@ -27,14 +27,18 @@
 
  */
 
+#define COEF 0.5
+#define MEAN_VALUE 340
+
 int sensorPin = A0;    // select the input pin for the potentiometer
 int ledPin = 13;      // select the pin for the LED
 
 uint32_t prevPrintTime;
-uint32_t prevSampleTime;
+uint32_t prevSampleTime,prevHiSampleTime;
 int bufIdx;
 uint16_t buffer[512];
 uint32_t totalSamples;
+uint16_t prevSampleValue, filteredValue;
 
 // state for updating extrema over a window ...
 uint16_t maxOver10,minOver10,maxOver100,minOver100;
@@ -57,6 +61,9 @@ void setup() {
   buffer[bufIdx++] = maxOver10 = minOver10 = maxOver100 = minOver100 = analogRead(sensorPin);
   totalSamples = 1; // this controls how far we can search on start up ...
 
+  prevSampleValue = maxOver10;
+  filteredValue = MEAN_VALUE;
+
   // initialize extrema indecies ...
   maxOver10Idx=minOver10Idx=maxOver100Idx=minOver100Idx=0;
 }
@@ -65,8 +72,24 @@ void loop() {
 
   uint32_t loopStart_ms = millis();
   uint32_t loopStart_us = micros();
-  uint32_t sampleValue;
+  uint16_t sampleValue;
 
+  // we've observed the mic run on 3.3V to produce average values around 340,
+  // maximum values of 684, and minimum values of 0.
+
+   // 20kHz sampling ...
+  if (loopStart_us-prevHiSampleTime > 50U) {
+    sampleValue = analogRead(sensorPin);
+    filteredValue = (int)(COEF*sampleValue)+(int)((1.0-COEF)*filteredValue);
+    prevHiSampleTime = loopStart_us;
+  }
+
+  if (loopStart_us-prevSampleTime > 2000U) {
+    Serial.print(filteredValue); Serial.print("\n");
+    prevSampleTime = loopStart_us;
+  }
+
+#if 0
   if (loopStart_us-prevSampleTime > 2000U) {
 
     // update sample buffer ...
@@ -84,6 +107,7 @@ void loop() {
     Serial.print("min/max over 100 "); Serial.print(minOver100); Serial.print(" "); Serial.print(maxOver100); Serial.print("\n");
     prevPrintTime = loopStart_ms;
   }
+#endif
 }
 
 //
