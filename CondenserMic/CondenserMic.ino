@@ -10,9 +10,14 @@
  This example code is in the public domain.
  */
 
-int gAttack, gDecay, gThreshold;
+int gAttack, gDecay, gThreshold, gEcho=1;
+
+#define RUN_DATA_50_Hz 0
+#define RUN_BPM  1
+int gRunMode = RUN_DATA_50_Hz;
 
 #define COEF 0.5
+float gCoef = COEF;
 #define MEAN_VALUE 340
 
 int sensorPin = A0;    // select the input pin for the potentiometer
@@ -124,6 +129,13 @@ static boolean secondBeat = true;       // used to seed rate array so we startup
     runningTotal /= 10;                     // average the last 10 IBI values 
     BPM = 60000/runningTotal;               // how many beats can fit into a minute? that's BPM!
     ret = 1; // new BPM ...
+
+    if (gEcho && (gRunMode == RUN_BPM)) { Serial.print("amp "); Serial.print(amp);
+                  Serial.print(" P "); Serial.print(P);
+                  Serial.print(" T "); Serial.print(T);
+                  Serial.print(" IBI "); Serial.print(IBI);
+                  Serial.print("\n");
+    }
    }                       
   }
 
@@ -160,25 +172,28 @@ void loop() {
    // 20kHz sampling ...
   if (loopStart_us-prevHiSampleTime > 50U) {
     sampleValue = analogRead(sensorPin);
-    filteredValue = (int)(COEF*sampleValue)+(int)((1.0-COEF)*filteredValue);
+    filteredValue = (int)(gCoef*sampleValue)+(int)((1.0-gCoef)*filteredValue);
     prevHiSampleTime = loopStart_us;
   }
 
   if (loopStart_us-prevSampleTime > 2000U) {
-    //Serial.print(filteredValue); Serial.print("\n");
+
+    if (gRunMode == RUN_DATA_50_Hz) {
+      Serial.print(filteredValue); Serial.print("\n");
+    }
     prevSampleTime = loopStart_us;
 
-	// this is the rate at which the light sensor beat follower runs.
-	if (UpdateBeatFollower(filteredValue)) {
+	  // this is the rate at which the light sensor beat follower runs.
+	  if (UpdateBeatFollower(filteredValue) && gRunMode == RUN_BPM) {
     		Serial.print(BPM); Serial.print("\n");
-	}
+	  }
   }
 
 
   if (Serial.available()) {
 
 	static int readCnt = 0;
-	static int readState = 0;
+	static char readState = 0;
 	static String numbuf = ""; 
 
 	char c = Serial.read();
@@ -190,7 +205,7 @@ void loop() {
 	if(readCnt == 0) {
 
 		switch(c) {
-		case 'A': case 'D': case 'T':
+		case 'A': case 'D': case 'T': case 'R': case 'C':
 			readState = c;
 			readCnt++;
 		break;
@@ -204,10 +219,16 @@ void loop() {
 
 			switch(readState) {
 			case 'A': gAttack = num;    break;
+      case 'C': gCoef = numbuf.toFloat(); break;
 			case 'D': gDecay = num;     break;
+      case 'R': gRunMode = num;   break;
 			case 'T': gThreshold = num; break;
 			}
 
+      if (gEcho) { Serial.print(readState); Serial.print(numbuf); Serial.print('\n'); }
+
+      numbuf.remove(0); // empty it.
+      
 		} else if (readCnt<8) {
 			numbuf += c;
 			readCnt++;
